@@ -31,17 +31,22 @@ button{margin-top:16px;border:0;border-radius:14px;padding:14px 22px;font-size:1
    phone so the app opens instantly next time. */
 (function(){
   var API = "https://script.google.com/macros/s/AKfycbzbMQ0tmfzuw0_u4SEySLw9qePSJIvmqzP_ZUGufnQuZ-kzYLB7Yw6logb4WQ-oYcNg/exec";
-  var KEY = "pt.appHtml";
-  function show(html){ document.open(); document.write(html); document.close(); }
-  function fail(){ document.getElementById("spin").style.display="none";
-    document.getElementById("msg").innerHTML="Can\u2019t reach the server.<br>Check your signal and try again.";
-    var b=document.createElement("button"); b.textContent="Try again"; b.onclick=function(){ location.reload(); }; document.getElementById("msg").parentNode.appendChild(b); }
+  var KEY = "pt.appHtml", done = false;
+  var msg = document.getElementById("msg");
+  function show(html){ done = true; document.open(); document.write(html); document.close(); }
+  function fail(why){ if (done) return; done = true;
+    document.getElementById("spin").style.display = "none";
+    msg.innerHTML = "Can\u2019t reach the server.<br>Check your signal and try again.<br><small style='opacity:.6'>" + String(why || "").replace(/[<>&]/g, "") + "</small>";
+    var b = document.createElement("button"); b.textContent = "Try again"; b.onclick = function(){ location.reload(); };
+    msg.parentNode.appendChild(b); }
   var cached = null; try { cached = localStorage.getItem(KEY); } catch (e) {}
-  var req = fetch(API + "?page=app", { cache: "no-store" })
-    .then(function(r){ if (!r.ok) throw new Error(r.status); return r.text(); })
-    .then(function(html){ if (html.indexOf("Procraft") < 0) throw new Error("bad"); try { localStorage.setItem(KEY, html); } catch (e) {} return html; });
+  var slow = setTimeout(function(){ if (!done) msg.textContent = "Still loading\u2026 the first open can take a few seconds."; }, 6000);
+  var stop = setTimeout(function(){ fail("Timed out"); }, 30000);
+  var req = fetch(API + "?page=app", { cache: "no-store", redirect: "follow" })
+    .then(function(r){ if (!r.ok) throw new Error("Server " + r.status); return r.text(); })
+    .then(function(html){ if (html.indexOf("Procraft") < 0) throw new Error("Unexpected reply"); try { localStorage.setItem(KEY, html); } catch (e) {} return html; });
   if (cached) { show(cached); req.catch(function(){}); }
-  else { req.then(show).catch(fail); }
+  else { req.then(function(h){ clearTimeout(slow); clearTimeout(stop); show(h); }).catch(function(e){ clearTimeout(slow); clearTimeout(stop); fail(e && e.message); }); }
 })();
 </script>
 </body>
