@@ -27,26 +27,28 @@ button{margin-top:16px;border:0;border-radius:14px;padding:14px 22px;font-size:1
 <div id="boot"><div><img src="icon-192.png" alt=""><div class="spin" id="spin"></div><p id="msg">Loading Procraft Tools…</p></div></div>
 <script>
 /* Thin shell: the app's screens are served by Google Apps Script, so updates
-   there go live without changing this file. The last version is kept on the
-   phone so the app opens instantly next time. */
+   there go live without changing this file. Always tries the server first;
+   the copy saved on the phone is only used if the server can't be reached. */
 (function(){
   var API = "https://script.google.com/macros/s/AKfycbzbMQ0tmfzuw0_u4SEySLw9qePSJIvmqzP_ZUGufnQuZ-kzYLB7Yw6logb4WQ-oYcNg/exec";
   var KEY = "pt.appHtml", done = false;
   var msg = document.getElementById("msg");
-  function show(html){ done = true; document.open(); document.write(html); document.close(); }
+  function show(html){ if (done) return; done = true; document.open(); document.write(html); document.close(); }
   function fail(why){ if (done) return; done = true;
     document.getElementById("spin").style.display = "none";
     msg.innerHTML = "Can\u2019t reach the server.<br>Check your signal and try again.<br><small style='opacity:.6'>" + String(why || "").replace(/[<>&]/g, "") + "</small>";
     var b = document.createElement("button"); b.textContent = "Try again"; b.onclick = function(){ location.reload(); };
     msg.parentNode.appendChild(b); }
-  var cached = null; try { cached = localStorage.getItem(KEY); } catch (e) {}
-  var slow = setTimeout(function(){ if (!done) msg.textContent = "Still loading\u2026 the first open can take a few seconds."; }, 6000);
-  var stop = setTimeout(function(){ fail("Timed out"); }, 30000);
-  var req = fetch(API + "?page=app", { cache: "no-store", redirect: "follow" })
+  function cachedOrFail(why){ var c = null; try { c = localStorage.getItem(KEY); } catch (e) {} if (c) show(c); else fail(why); }
+  var slow = setTimeout(function(){ if (!done) msg.textContent = "Still loading\u2026 the first open can take a few seconds."; }, 5000);
+  var giveUp = setTimeout(function(){ cachedOrFail("Timed out"); }, 20000);
+  fetch(API + "?page=app", { cache: "no-store", redirect: "follow" })
     .then(function(r){ if (!r.ok) throw new Error("Server " + r.status); return r.text(); })
-    .then(function(html){ if (html.indexOf("Procraft") < 0) throw new Error("Unexpected reply"); try { localStorage.setItem(KEY, html); } catch (e) {} return html; });
-  if (cached) { show(cached); req.catch(function(){}); }
-  else { req.then(function(h){ clearTimeout(slow); clearTimeout(stop); show(h); }).catch(function(e){ clearTimeout(slow); clearTimeout(stop); fail(e && e.message); }); }
+    .then(function(html){
+      if (html.indexOf("Procraft") < 0) throw new Error("Unexpected reply");
+      try { localStorage.setItem(KEY, html); } catch (e) {}
+      clearTimeout(slow); clearTimeout(giveUp); show(html); })
+    .catch(function(e){ clearTimeout(slow); clearTimeout(giveUp); cachedOrFail(e && e.message); });
 })();
 </script>
 </body>
